@@ -1,0 +1,11 @@
+gitpython==3.1.43
+sentence-transformers==2.7.0
+faiss-cpu==1.8.0
+transformers==4.42.0
+accelerate==0.29.3
+huggingface-hub==0.23.3
+bitsandbytes==0.43.1
+pydantic==2.7.3
+typer[all]==0.12.3
+tqdm==4.66.4
+numpy>=1.21.0
