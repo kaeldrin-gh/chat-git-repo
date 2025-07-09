@@ -8,7 +8,7 @@ from typing import List
 import typer
 from tqdm import tqdm
 
-from ..config import DEFAULT_STORAGE_DIR
+from ..config import DEFAULT_STORAGE_DIR, DEFAULT_LLM_MODEL
 from ..embeddings.embedder import CodeEmbedder
 from ..ingestion.chunker import SyntaxAwareChunker
 from ..ingestion.git_loader import GitLoader
@@ -122,7 +122,7 @@ def ingest(
 def chat(
     store: Path = typer.Option(..., "--store", "-s", help="Path to the vector store"),
     model: str = typer.Option(
-        "google/gemma-3n-E4B-it",
+        DEFAULT_LLM_MODEL,
         "--model",
         "-m",
         help="Language model to use for generation",
@@ -152,7 +152,7 @@ def chat(
         
         # Initialize chat system
         typer.echo(f"🤖 Loading language model: {model}")
-        code_chat = CodeChat(vector_store, model_name=model)
+        code_chat = CodeChat(vector_store, model_name=model, use_4bit=False)  # Disable quantization for Windows
         
         # Get model info
         model_info = code_chat.get_model_info()
@@ -174,10 +174,15 @@ def chat(
                         continue
                     
                     typer.echo("\n🤖 Thinking...")
-                    answer = code_chat.chat(question)
-                    
-                    typer.echo(f"\n💡 Answer:\n{answer}")
-                    typer.echo("-" * 50)
+                    try:
+                        answer = code_chat.chat(question)
+                        typer.echo(f"\n💡 Answer:\n{answer}")
+                        typer.echo("-" * 50)
+                    except Exception as e:
+                        typer.echo(f"❌ Error generating answer: {e}", err=True)
+                        import traceback
+                        traceback.print_exc()
+                        continue
                     
                 except KeyboardInterrupt:
                     break

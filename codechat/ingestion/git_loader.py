@@ -1,5 +1,7 @@
 """Git repository loader for code ingestion."""
 
+import logging
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -7,6 +9,8 @@ from typing import Iterator, List, Tuple
 
 import git
 from git import Repo
+
+logger = logging.getLogger(__name__)
 
 from ..config import SUPPORTED_EXTENSIONS, TEMP_CLONE_DIR
 
@@ -102,4 +106,32 @@ class GitLoader:
     def cleanup(self) -> None:
         """Clean up temporary directories."""
         if self.temp_dir.exists():
-            shutil.rmtree(self.temp_dir)
+            self._force_remove_readonly(self.temp_dir)
+    
+    def _force_remove_readonly(self, path: Path) -> None:
+        """Force remove readonly files on Windows."""
+        import stat
+        
+        def handle_remove_readonly(func, path, exc):
+            """Handle readonly files during removal."""
+            if exc[0] == PermissionError:
+                # Change the file to be writable and try again
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+            else:
+                raise exc[1]
+        
+        try:
+            shutil.rmtree(path, onerror=handle_remove_readonly)
+        except Exception:
+            # If still fails, try to change permissions recursively
+            try:
+                for root, dirs, files in os.walk(path):
+                    for dir in dirs:
+                        os.chmod(os.path.join(root, dir), stat.S_IWRITE)
+                    for file in files:
+                        os.chmod(os.path.join(root, file), stat.S_IWRITE)
+                shutil.rmtree(path)
+            except Exception:
+                # Final fallback - just log the error
+                logger.warning(f"Failed to clean up temporary directory: {path}")

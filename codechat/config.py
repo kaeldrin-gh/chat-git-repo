@@ -45,7 +45,14 @@ Answer:"""
 
 # Environment variables
 def get_hf_token() -> str | None:
-    """Get HuggingFace token from environment."""
+    """Get HuggingFace token from environment.
+    
+    This token is required to access the Gemma model from HuggingFace.
+    Set it as an environment variable: export HUGGINGFACE_TOKEN=your_token_here
+    
+    Returns:
+        HuggingFace token or None if not set.
+    """
     return os.getenv("HUGGINGFACE_TOKEN")
 
 

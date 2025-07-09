@@ -76,6 +76,7 @@ class CodeChat:
             "token": get_hf_token(),
             "trust_remote_code": True,
             "torch_dtype": getattr(torch, TORCH_DTYPE) if self.device == "cuda" else torch.float32,
+            "attn_implementation": "eager",  # Use eager attention for Gemma compatibility
         }
         
         # Add quantization config if using 4-bit and GPU
@@ -190,20 +191,44 @@ class CodeChat:
             return_tensors="pt",
             truncation=True,
             max_length=MAX_CONTEXT_LENGTH,
-            padding=True,
+            padding=False,  # Don't pad for single input
         ).to(self.device)
         
         # Generate response
         with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=MAX_GENERATION_LENGTH,
-                temperature=TEMPERATURE,
-                do_sample=True,
-                pad_token_id=self.tokenizer.eos_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-                repetition_penalty=1.1,
-            )
+            try:
+                # Get input length for position IDs
+                input_length = inputs["input_ids"].shape[1]
+                
+                outputs = self.model.generate(
+                    input_ids=inputs["input_ids"],
+                    attention_mask=inputs["attention_mask"],
+                    max_new_tokens=MAX_GENERATION_LENGTH,
+                    temperature=TEMPERATURE,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    repetition_penalty=1.1,
+                    use_cache=True,
+                    output_scores=False,
+                    return_dict_in_generate=False,
+                )
+            except Exception as e:
+                logger.error(f"Generation failed: {e}")
+                # Fallback to greedy decoding with minimal parameters
+                try:
+                    outputs = self.model.generate(
+                        input_ids=inputs["input_ids"],
+                        max_new_tokens=50,  # Shorter generation
+                        do_sample=False,
+                        pad_token_id=self.tokenizer.pad_token_id,
+                        eos_token_id=self.tokenizer.eos_token_id,
+                        use_cache=False,
+                    )
+                except Exception as e2:
+                    logger.error(f"Fallback generation also failed: {e2}")
+                    # Return a simple fallback message
+                    return "I cannot generate a response due to a technical issue, but I found relevant code chunks in the context."
         
         # Decode response
         response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
